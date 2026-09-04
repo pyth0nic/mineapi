@@ -12,6 +12,9 @@
   },
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@types/express": "^4.17.15",
     "@types/uuid": "^9.0.0",
@@ -21,38 +24,43 @@
     "dotenv": "^16.0.0",
     "express-async-errors": "^3.1.1",
     "isomorphic-fetch": "^3.0.0",
-    "minecraft-data": "^3.0.0",
-    "mineflayer": "^4.4.0",
+    "minecraft-data": "^3.115.0",
+    "mineflayer": "^4.38.0",
     "mineflayer-builder": "^1.0.1",
-    "mineflayer-collectblock": "^1.4.1",
-    "mineflayer-pathfinder": "^2.4.4",
+    "mineflayer-collectblock": "^1.6.0",
+    "mineflayer-pathfinder": "2.4.5",
     "mineflayer-pvp": "^1.3.2",
     "mineflayer-tool": "^1.2.0",
     "nodemon": "^2.0.15",
-    "prismarine-recipe": "^1.2.0",
-    "prismarine-schematic": "^1.2.3",
-    "prismarine-viewer": "^1.21.0",
+    "prismarine-block": "^1.23.0",
+    "prismarine-entity": "^2.6.0",
+    "prismarine-recipe": "^1.5.0",
+    "prismarine-schematic": "^1.3.0",
+    "prismarine-viewer": "^1.33.0",
     "ts-node": "^10.9.1",
     "tslog": "^3.3.4",
     "typescript": "^4.8.3",
     "underscore": "^1.13.4",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "vec3": "^0.2.0"
+  },
+  "overrides": {
+    "mineflayer-pathfinder": "$mineflayer-pathfinder"
   },
   "devDependencies": {
     "@types/node": "^18.11.18",
-    "pkg": "^5.8.0"
+    "@yao-pkg/pkg": "^6.22.0"
   },
   "bin": {
-    "index": "index.js"
+    "index": "build/index.js"
   },
   "pkg": {
     "scripts": [
-      "./**/*.js",
-      "./**/*.ts"
+      "./build/**/*.js"
     ],
     "targets": [
-      "node16-win-x64",
-      "node16-linux-x64"
+      "node22-win-x64",
+      "node22-linux-x64"
     ],
     "outputPath": "builds/"
   }
