@@ -29,6 +29,11 @@ For an exact mining contract, use `MineBlockAtAction`:
     "continueOnFailure": false
   }
 ]
+### Internal package registries
+For a registry that is TLS-inspected with an internal CA, preserve TLS verification and provide the CA certificate as a BuildKit secret:
+
+```sh
+docker build --secret id=npm_ca,src=/path/to/registry-ca.pem -t mineapi .
 ```
 
 ## Integration tests
