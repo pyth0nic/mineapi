@@ -3,7 +3,7 @@ import { Attributes } from "./Attributes";
 import { MinecraftVersion } from "./Config";
 import mcd from 'minecraft-data'
 import { logger } from "./log";
-import { v4 as uuidv4, v4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 import { CraftAction, CraftActionParams } from "./actions/CraftAction";
 import { FightAction, FightActionParams } from "./actions/FightAction";
 import { FindAndCollectAction, FindAndCollectParams } from "./actions/FindAndCollectResourceAction";
@@ -17,13 +17,17 @@ import { BotActionState } from "./actions/BotActionState";
 import { SmeltAction, SmeltActionParams } from "./actions/SmeltAction";
 import { DepositAction, DepositActionParams } from "./actions/DepositAction";
 import { WithdrawAction, WithdrawActionParams } from "./actions/WithdrawAction";
+import { MineBlockAtAction, MineBlockAtParams } from "./actions/MineBlockAtAction";
+import { observe, vec2key } from "./Observer";
+import { Observation } from "./types";
+import { Vec3 } from "vec3";
 
 let mcData = mcd(MinecraftVersion)
 
-type ActionParams = CraftActionParams | FightActionParams | FindAndCollectParams | PlaceActionParams | SleepActionParams | TravelActionParams | SmeltActionParams | DepositActionParams | WithdrawActionParams
+type ActionParams = CraftActionParams | FightActionParams | FindAndCollectParams | PlaceActionParams | SleepActionParams | TravelActionParams | SmeltActionParams | DepositActionParams | WithdrawActionParams | MineBlockAtParams
 
 export interface CallbackInfo {
-    typeName: 'CraftAction' | 'FightAction' | 'FindAndCollectAction' | 'PlaceAction' | 'SleepAction' | 'TravelAction' | 'SmeltAction' | 'DepositAction' | 'WithdrawAction'
+    typeName: 'CraftAction' | 'FightAction' | 'FindAndCollectAction' | 'PlaceAction' | 'SleepAction' | 'TravelAction' | 'SmeltAction' | 'DepositAction' | 'WithdrawAction' | 'MineBlockAtAction'
     params: ActionParams
     continueOnFailure: boolean
     callback?: Action<any>
@@ -31,24 +35,35 @@ export interface CallbackInfo {
 
 export interface Task {
     id: string
-    status?: true | FailedChainResult
-    message?: string
+    status: TaskStatus
     callbackChain: CallbackInfo[]
+    startedAt?: number
+    completedAt?: number
+    result?: true | FailedChainResult
+    before?: Observation
+    after?: Observation
+    worldDelta?: Record<number, number>
 }
+
+export type TaskStatus = 'accepted' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 class TaskRunner {
     tasks: { [id: string]: Task } = {}
     attributes: Attributes
     actionState: BotActionState;
+    activeTaskId?: string
 
     constructor(attributes: Attributes) {
         this.attributes = attributes
         this.actionState = new BotActionState(this.attributes.bot)
     }
 
-    async start(task: Task, isPossible: boolean = false) {
+    async start(task: Task) {
         if (this.tasks[task.id]) {
             throw new Error("Task has already started!")
+        }
+        if (this.activeTaskId) {
+            throw new Error("Another task is already running")
         }
         const unresolvedCallbacks = task.callbackChain.filter(x=> !x.callback)
         if (unresolvedCallbacks.length > 0) {
@@ -56,32 +71,56 @@ class TaskRunner {
         }
 
         this.tasks[task.id] = task
+        this.activeTaskId = task.id
+        void this.execute(task)
+        return task
+    }
 
-        if (isPossible) {
-            return await this.attributes.canDo(task.callbackChain.map(x=> {
-                const cons = x.callback! as any;
-                const params = { ...this.attributes.actionOptions, ...x.params }
-                return new cons(params)
-            }))
-        } else {
-            const result = await this.attributes.tryDo(task.callbackChain.map(x=> {
-                const cons = x.callback! as any;
-                const params = { ...this.attributes.actionOptions, ...x.params }
-                const action = new cons(params)
+    private async execute(task: Task) {
+        const worldDelta: Record<number, number> = {}
+        const recordBlockChange = (_oldBlock: any, newBlock: any) => {
+            if (newBlock?.position) worldDelta[vec2key(newBlock.position)] = newBlock.type
+        }
+        this.attributes.bot.on('blockUpdate', recordBlockChange)
+        task.status = 'running'
+        task.startedAt = Date.now()
+        task.before = await observe(this.attributes.bot)
+        try {
+            const actions = task.callbackChain.map(x => {
+                const Constructor = x.callback! as any
+                const action = new Constructor({ ...this.attributes.actionOptions, ...x.params })
                 this.actionState.startTask(action)
                 return action
-            }))
-            this.actionState.stopTask();
-            return result;
+            })
+            const result = await this.attributes.tryDo(actions)
+            task.result = result
+            task.status = task.status === 'cancelled' ? 'cancelled' : result === true ? 'succeeded' : 'failed'
+        } catch (error) {
+            task.result = { index: -1, reason: error instanceof Error ? error.message : String(error) }
+            task.status = task.status === 'cancelled' ? 'cancelled' : 'failed'
+        } finally {
+            this.attributes.bot.removeListener('blockUpdate', recordBlockChange)
+            this.actionState.stopTask()
+            task.worldDelta = worldDelta
+            task.after = await observe(this.attributes.bot)
+            task.after.world = worldDelta
+            task.completedAt = Date.now()
+            this.activeTaskId = undefined
         }
     }
 
-    async stop(task: Task) {
-        // todo
+    get(taskId: string) {
+        return this.tasks[taskId]
     }
 
-    async status(task: Task) {
-        // todo
+    async stop(taskId?: string) {
+        const activeTask = this.activeTaskId ? this.tasks[this.activeTaskId] : undefined
+        if (!activeTask || (taskId && activeTask.id !== taskId)) {
+            throw new Error("No matching task is running")
+        }
+        activeTask.status = 'cancelled'
+        this.attributes.bot.pathfinder.stop()
+        this.attributes.bot.stopDigging()
     }
 }
 
@@ -119,7 +158,7 @@ export class BotService {
         });
         this.attributes = new Attributes(this.bot, mcData, logger)
         this.id = uuidv4()
-        this.actions = [CraftAction, FightAction, FindAndCollectAction, PlaceAction, SleepAction, TravelAction, SmeltAction, DepositAction, WithdrawAction]
+        this.actions = [CraftAction, FightAction, FindAndCollectAction, MineBlockAtAction, PlaceAction, SleepAction, TravelAction, SmeltAction, DepositAction, WithdrawAction]
         this.actionsMap = Object.assign({}, ...this.actions.map(x=> ({ [x.name]: x })))
         this.taskRunner = new TaskRunner(this.attributes)
 
@@ -141,7 +180,17 @@ export class BotService {
         return await this.taskRunner?.actionState.get_action_state()
     }
 
-    async start_task(callbackChain: CallbackInfo[], isPossible: boolean = false) {
+    async can_do(callbackChain: CallbackInfo[]) {
+        const task = this.resolveTask(callbackChain)
+        return this.attributes!.canDo(task.callbackChain.map(x => new (x.callback! as any)({ ...this.attributes!.actionOptions, ...x.params })))
+    }
+
+    async start_task(callbackChain: CallbackInfo[]) {
+        const task = this.resolveTask(callbackChain)
+        return this.taskRunner!.start(task)
+    }
+
+    private resolveTask(callbackChain: CallbackInfo[]) {
         for (let info of callbackChain) {
             const cons = this.actionsMap[info.typeName]
             if (!cons) {
@@ -149,18 +198,19 @@ export class BotService {
             }
             info.callback = cons;
         }
-        let task = { id: v4(), callbackChain: callbackChain } as Task
-        
-        return this.taskRunner!.start(task, isPossible)
+        return { id: uuidv4(), status: 'accepted', callbackChain } as Task
+    }
+
+    get_task(taskId: string) {
+        return this.taskRunner!.get(taskId)
     }
 
     chat(message: string) {
         this.bot.chat(message)
     }
 
-    async stop() {
-        this.bot.pathfinder.stop()
-        this.bot.stopDigging()
+    async stop(taskId?: string) {
+        await this.taskRunner!.stop(taskId)
         this.bot.chat("Have stopped for now")
     }
 
