@@ -10,6 +10,7 @@ import { MinecraftVersion } from '../../Config'
 import { TravelAction } from '../../actions/TravelAction'
 import { CraftAction } from '../../actions/CraftAction'
 import { FindAndCollectAction } from '../../actions/FindAndCollectResourceAction'
+import { MineBlockAtAction } from '../../actions/MineBlockAtAction'
 import { FightAction } from '../../actions/FightAction'
 import { BuildSchematicAction } from '../../actions/BuildSchematicAction'
 import { logger } from '../../log'
@@ -84,6 +85,18 @@ async function main () {
     })
     assert.equal(await collect.do(false, undefined), true, 'bot should collect a nearby block')
     await waitFor(() => bot.blockAt(new Vec3(7, 5, 0))?.name === 'air' ? true : undefined, 'bot did not collect the target block')
+
+    const exactTarget = new Vec3(8, 5, 0)
+    await rcon.send(`setblock ${exactTarget.x} ${exactTarget.y} ${exactTarget.z} minecraft:oak_log`)
+    await sleep(500)
+    const mineAt = new MineBlockAtAction({
+      bot,
+      mcData,
+      blockId: mcData.blocksByName.oak_log.id,
+      position: exactTarget
+    })
+    assert.equal(await mineAt.do(false, undefined), true, 'bot should collect the exact target block')
+    await waitFor(() => bot.blockAt(exactTarget)?.name === 'air' ? true : undefined, 'bot did not collect the exact target block')
 
     await rcon.send('summon zombie 5 5 3 {NoAI:1b}')
     const zombie = await waitFor(() => Object.values(bot.entities).find(entity => entity.name === 'zombie'), 'zombie did not appear')

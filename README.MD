@@ -8,6 +8,27 @@ This project allows you to run a swarm of bots from through REST API! This is ca
 * Now start the API ```npm start```
 * Use the postman collection to initialise a bot, now you can run commands like fight an entity or collect resources.
 
+## Task lifecycle API
+
+`POST /tryDo/:name` accepts a callback chain and immediately returns `202 Accepted` with a `taskId`.
+Poll `GET /task/:name/:taskId` for the correlated lifecycle (`accepted`, `running`, `succeeded`,
+`failed`, or `cancelled`), execution result, before/after observations, and block changes observed
+while the task ran. `GET /action_state/:name` includes the active `taskId` with the current activity
+analysis. Cancel the active task with `POST /stop/:name/:taskId`.
+
+For an exact mining contract, use `MineBlockAtAction`:
+
+```json
+[
+  {
+    "typeName": "MineBlockAtAction",
+    "params": {
+      "blockId": 17,
+      "position": { "x": 7, "y": 5, "z": 0 }
+    },
+    "continueOnFailure": false
+  }
+]
 ### Internal package registries
 For a registry that is TLS-inspected with an internal CA, preserve TLS verification and provide the CA certificate as a BuildKit secret:
 

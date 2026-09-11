@@ -181,6 +181,8 @@ export class BotActionState extends EventEmitter {
       clearInterval(this.stateRecordingInterval);
       this.stateRecordingInterval = undefined;
     }
+    this.currentTask = undefined;
+    this.stateRecordHistory = [];
   }
 
   private analyzeOverTime(
@@ -225,4 +227,3 @@ export class BotActionState extends EventEmitter {
     return this.analyse();
   }
 }
-
