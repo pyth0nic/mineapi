@@ -10,7 +10,6 @@ import { FindAndCollectAction, FindAndCollectParams } from "./actions/FindAndCol
 import { PlaceAction, PlaceActionParams } from './actions/PlaceAction';
 import { SleepAction, SleepActionParams } from "./actions/SleepAction";
 import { TravelAction, TravelActionParams } from "./actions/TravelAction";
-import { observe } from "./Observer";
 import { FailedChainResult } from "./types";
 import { Action } from "./actions/Action";
 import { BotActionState } from "./actions/BotActionState";
@@ -20,7 +19,6 @@ import { WithdrawAction, WithdrawActionParams } from "./actions/WithdrawAction";
 import { MineBlockAtAction, MineBlockAtParams } from "./actions/MineBlockAtAction";
 import { observe, vec2key } from "./Observer";
 import { Observation } from "./types";
-import { Vec3 } from "vec3";
 
 let mcData = mcd(MinecraftVersion)
 
@@ -94,10 +92,10 @@ class TaskRunner {
             })
             const result = await this.attributes.tryDo(actions)
             task.result = result
-            task.status = task.status === 'cancelled' ? 'cancelled' : result === true ? 'succeeded' : 'failed'
+            task.status = this.isCancelled(task) ? 'cancelled' : result === true ? 'succeeded' : 'failed'
         } catch (error) {
             task.result = { index: -1, reason: error instanceof Error ? error.message : String(error) }
-            task.status = task.status === 'cancelled' ? 'cancelled' : 'failed'
+            task.status = this.isCancelled(task) ? 'cancelled' : 'failed'
         } finally {
             this.attributes.bot.removeListener('blockUpdate', recordBlockChange)
             this.actionState.stopTask()
@@ -111,6 +109,14 @@ class TaskRunner {
 
     get(taskId: string) {
         return this.tasks[taskId]
+    }
+
+    get currentTaskId() {
+        return this.activeTaskId
+    }
+
+    private isCancelled(task: Task) {
+        return task.status === 'cancelled'
     }
 
     async stop(taskId?: string) {
@@ -177,7 +183,10 @@ export class BotService {
     }
 
     async get_action_state() {
-        return await this.taskRunner?.actionState.get_action_state()
+        return {
+            taskId: this.taskRunner?.currentTaskId,
+            state: await this.taskRunner?.actionState.get_action_state()
+        }
     }
 
     async can_do(callbackChain: CallbackInfo[]) {
