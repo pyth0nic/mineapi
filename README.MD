@@ -8,6 +8,13 @@ This project allows you to run a swarm of bots from through REST API! This is ca
 * Now start the API ```npm start```
 * Use the postman collection to initialise a bot, now you can run commands like fight an entity or collect resources.
 
+### Internal package registries
+For a registry that is TLS-inspected with an internal CA, preserve TLS verification and provide the CA certificate as a BuildKit secret:
+
+```sh
+docker build --secret id=npm_ca,src=/path/to/registry-ca.pem -t mineapi .
+```
+
 ## Integration tests
 The integration suite exercises login, movement, crafting, collection, combat, and schematic building against a local Java 1.17.1 server.
 
